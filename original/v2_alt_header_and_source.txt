@@ -1,0 +1,392 @@
+头文件：
+#ifndef _MAIN_H_
+#define _MAIN_H_
+
+void gamewindowshake();
+void gamedrawpixal(int x, int y, COLORREF COLOR, float xy);
+void drawsnack();
+void foodinit();
+void gameinit();
+void gameover();
+void drawfood();
+void drawbk();
+void gamepause();
+void gameupdata();
+void drawlizi();
+void startBackgroundMusic();
+void loadHighScore();
+void DrawHeart();
+void initlizi(int x, int y);
+
+#endif
+
+源文件：
+
+#include <graphics.h>
+#include <time.h>
+#include <Windows.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <conio.h>
+#include <iostream>
+#include "main.h"
+#include <fstream>
+
+using namespace std;
+
+#define PI acos(-1)
+#define WIDTH 1080main
+#define HEIGHT 720
+
+#define BLOCK_XY 30
+#define BLOCK_JJ 2
+COLORREF SNACK_COLOR_MAX = COLORREF RGB(255, 182, 193);
+COLORREF SNACK_COLOR_MIN = COLORREF RGB(255, 182, 193);
+COLORREF BK_COLOR = COLORREF RGB(255, 20, 147);
+float SNACK_XY_MAX = 0;
+float SNACK_XY_MIN = 10;
+#define GAMETIME 100
+#define LIZINUM 30
+int CAMERA_X = 0;
+int CAMERA_Y = 0;
+#define SHAKE 120
+int WINDOW_SHAKE = 0;
+int score = 0;
+int highestScore = 0;
+bool isNewHighScore = false;
+
+const int BLOCK_WIDTH = WIDTH / (BLOCK_XY + BLOCK_JJ);
+const int BLOCK_HEIGHT = HEIGHT / (BLOCK_XY + BLOCK_JJ);
+
+const int PYI_X = WIDTH - BLOCK_WIDTH * (BLOCK_XY + BLOCK_JJ);
+const int PYI_Y = HEIGHT - BLOCK_HEIGHT * (BLOCK_XY + BLOCK_JJ);
+const float G = 0.001f;
+const float MC = 0.9999f;
+float jd = 0;
+
+struct snack {
+    int dx = 1, dy = 0;
+    int snack_map[BLOCK_WIDTH * BLOCK_HEIGHT] = { 2,1,0 };
+    int snack_len = 3;
+} Snack;
+
+struct lizi {
+    float x = 0, y = 0;
+    int sjx[6] = { -7, -7, 7, -7, -7, 7 };
+    float dx, dy;
+    float jd = 0;
+    float djd = 0;
+    int life = 100;
+    int d_life = 0;
+    COLORREF RGB;
+} Lizi[LIZINUM];
+
+#define M_PI 3.14159265358979323846
+
+void initlizi(int x, int y) {
+    for (int i = 0; i < LIZINUM; i++) {
+        Lizi[i].x = rand() % BLOCK_XY + x;
+        Lizi[i].y = rand() % BLOCK_XY + y;
+        float angle = 2 * M_PI * rand() / RAND_MAX;
+        float speed = 0.5 * sqrt(rand() / (float)RAND_MAX);
+        Lizi[i].dx = speed * cos(angle);
+        Lizi[i].dy = speed * sin(angle);
+        Lizi[i].jd = rand() % 36000;
+        Lizi[i].djd = (rand() % 200 - 100) / 100.0f;
+        Lizi[i].RGB = RGB(rand() % 256, rand() % 256, rand() % 256);
+    }
+}
+
+void drawlizi() {
+    for (int i = 0; i < LIZINUM; i++) {
+        Lizi[i].x += Lizi[i].dx;
+        Lizi[i].y += Lizi[i].dy;
+        Lizi[i].dy += G;
+        Lizi[i].jd += Lizi[i].djd;
+        setfillcolor(Lizi[i].RGB);
+        float angle = Lizi[i].jd * M_PI / 180.0f;
+        int radius = 5;
+        int px = Lizi[i].x + radius * cos(angle);
+        int py = Lizi[i].y + radius * sin(angle);
+        fillrectangle(px - radius, py - radius, px + radius, py + radius);
+    }
+}
+
+struct food {
+    int food_x, food_y;
+    int z = -30;
+    int jz = 20;
+    int zmp = -30;
+    int p = 0;
+} Food;
+
+int maptox(int map) {
+    return (map % BLOCK_WIDTH);
+}
+
+int maptoy(int map) {
+    return (map / BLOCK_WIDTH);
+}
+
+int xytomap(int x, int y) {
+    return (y * BLOCK_WIDTH + x);
+}
+
+void gamewindowshake() {
+    if (WINDOW_SHAKE < SHAKE) {
+        int x = rand() % 30 - 15;
+        int y = rand() % 30 - 15;
+        CAMERA_X = x;
+        CAMERA_Y = y;
+        WINDOW_SHAKE++;
+    }
+    else {
+        CAMERA_X = 0;
+        CAMERA_Y = 0;
+    }
+}
+
+void gamedrawpixal(int x, int y, COLORREF COLOR, float xy) {
+    int py_x = PYI_X / 2;
+    int py_y = PYI_Y / 2;
+    float xy2 = xy / 2;
+    setfillcolor(COLOR);
+    setlinecolor(COLOR);
+    fillrectangle(x * BLOCK_XY + x * BLOCK_JJ + xy2 + py_x + CAMERA_X, y * BLOCK_XY + y * BLOCK_JJ + xy2 + py_y + CAMERA_Y,
+        BLOCK_XY + x * BLOCK_XY + x * BLOCK_JJ - xy2 + py_x + CAMERA_X, BLOCK_XY + y * BLOCK_XY + y * BLOCK_JJ - xy2 + py_y + CAMERA_Y);
+}
+
+void drawsnack() {
+    int rp = (GetRValue(SNACK_COLOR_MAX) - GetRValue(SNACK_COLOR_MIN)) / (Snack.snack_len - 1);
+    int gp = (GetGValue(SNACK_COLOR_MAX) - GetGValue(SNACK_COLOR_MIN)) / (Snack.snack_len - 1);
+    int bp = (GetBValue(SNACK_COLOR_MAX) - GetBValue(SNACK_COLOR_MIN)) / (Snack.snack_len - 1);
+    float pp = (SNACK_XY_MAX - SNACK_XY_MIN) / (Snack.snack_len - 1);
+    gamedrawpixal(maptox(Snack.snack_map[0]), maptoy(Snack.snack_map[0]), SNACK_COLOR_MAX, SNACK_XY_MAX);
+    for (int i = 1; i < Snack.snack_len - 1; i++) {
+        gamedrawpixal(maptox(Snack.snack_map[i]), maptoy(Snack.snack_map[i]),
+            RGB(GetRValue(SNACK_COLOR_MAX) - (rp * i), GetGValue(SNACK_COLOR_MAX) - (gp * i), GetBValue(SNACK_COLOR_MAX) - (bp * i)), SNACK_XY_MAX - (pp * i));
+    }
+    gamedrawpixal(maptox(Snack.snack_map[Snack.snack_len - 1]), maptoy(Snack.snack_map[Snack.snack_len - 1]), SNACK_COLOR_MIN, SNACK_XY_MIN);
+}
+
+void foodinit() {
+LOOP:
+    Food.food_x = rand() % BLOCK_WIDTH;
+    Food.food_y = rand() % BLOCK_HEIGHT;
+    for (int i = 0; i < Snack.snack_len; i++) {
+        if ((maptox(Snack.snack_map[i]) == Food.food_x) && (maptoy(Snack.snack_map[i]) == Food.food_y))
+            goto LOOP;
+    }
+    Food.p = 0;
+}
+
+void gameinit() {
+    Snack.dx = 1;
+    Snack.dy = 0;
+    Snack.snack_map[0] = 2;
+    Snack.snack_map[1] = 1;
+    Snack.snack_map[2] = 0;
+    Snack.snack_len = 3;
+    score = 0;
+}
+
+void gameover() {
+    PlaySound(NULL, 0, 0);
+    PlaySound(TEXT("D:\\output.wav"), NULL, SND_FILENAME | SND_ASYNC);
+    settextcolor(WHITE);
+    settextstyle(90, 50, _T("Consolas"));
+    RECT r = { 0, 0, WIDTH, HEIGHT };
+    if (score > highestScore) {
+        highestScore = score;
+        isNewHighScore = true;
+        ofstream file("highscore.txt");
+        if (file.is_open()) {
+            file << highestScore;
+            file.close();
+        }
+    }
+    while (1) {
+        if (_kbhit()) {
+            char ch = _getch();
+            if (ch == 13) {
+                gameinit();
+                startBackgroundMusic();
+                break;
+            }
+        }
+        cleardevice();
+        drawbk();
+        drawfood();
+        drawsnack();
+        WINDOW_SHAKE = 0;
+        gamewindowshake();
+        drawtext(_T("Game Over (-3-) ~ Press Enter to Restart"), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        if (isNewHighScore) {
+            TCHAR newHighScoreStr[100];
+            _stprintf_s(newHighScoreStr, _countof(newHighScoreStr), _T("New High Score: %d"), highestScore);
+            outtextxy(WIDTH / 2, HEIGHT / 2 + 50, newHighScoreStr);
+        }
+        FlushBatchDraw();
+    }
+}
+
+void drawfood() {
+    if (!Food.p) {
+        if (Food.zmp > Food.jz) {
+            Food.zmp = Food.z;
+            Food.p = !Food.p;
+        }
+        float p = (Food.zmp * Food.zmp) / 10 - 100;
+        gamedrawpixal(Food.food_x, Food.food_y, RGB(255, 255, 255), p);
+        Food.zmp++;
+    }
+    else {
+        gamedrawpixal(Food.food_x, Food.food_y, RGB(255, 255, 255), 0);
+    }
+}
+
+void drawbk() {
+    COLORREF BK_COLOR = RGB(128, 0, 128);
+    setfillcolor(BK_COLOR); setlinecolor(BK_COLOR);
+    fillrectangle(0 + CAMERA_X, 0 + CAMERA_Y, PYI_X / 2 + CAMERA_X, HEIGHT + CAMERA_Y);
+    fillrectangle((WIDTH - PYI_X / 2) + CAMERA_X, 0 + CAMERA_Y, WIDTH + CAMERA_X, HEIGHT + CAMERA_Y);
+    fillrectangle(0 + CAMERA_X, 0 + CAMERA_Y, WIDTH + CAMERA_X, PYI_Y / 2 + CAMERA_Y);
+    fillrectangle(0 + CAMERA_X, HEIGHT + CAMERA_Y, WIDTH + CAMERA_X, (HEIGHT - PYI_Y / 2) + CAMERA_Y);
+    settextcolor(WHITE);
+    setbkmode(TRANSPARENT);
+    settextstyle(50, 0, _T("Consolas"));
+    TCHAR scoreStr[100];
+    _stprintf_s(scoreStr, _countof(scoreStr), _T("Score: %d"), score);
+    outtextxy(10, 10, scoreStr);
+}
+
+void gamepause() {
+    PlaySound(NULL, NULL, 0);
+    settextcolor(WHITE);
+    settextstyle(90, 50, _T("Consolas"));
+    RECT r = { 0, 0, WIDTH, HEIGHT };
+    drawtext(_T("Pause! ^3^ "), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    FlushBatchDraw();
+    while (1) {
+        if (_kbhit()) {
+            char ch = _getch();
+            if (ch == 32) {
+                startBackgroundMusic();
+                break;
+            }
+        }
+        FlushBatchDraw();
+    }
+}
+
+void gameupdata() {
+    char ch;
+    if (_kbhit()) {
+        ch = _getch();
+        switch (ch) {
+        case 119:
+            if (!(Snack.dx == 0 && Snack.dy == 1)) {
+                Snack.dx = 0;
+                Snack.dy = -1;
+            }
+            break;
+        case 115:
+            if (!(Snack.dx == 0 && Snack.dy == -1)) {
+                Snack.dx = 0;
+                Snack.dy = 1;
+            }
+            break;
+        case 97:
+            if (!(Snack.dx == 1 && Snack.dy == 0)) {
+                Snack.dx = -1;
+                Snack.dy = 0;
+            }
+            break;
+        case 100:
+            if (!(Snack.dx == -1 && Snack.dy == 0)) {
+                Snack.dx = 1;
+                Snack.dy = 0;
+            }
+            break;
+        case 32:
+            gamepause();
+            break;
+        }
+    }
+
+    for (int i = 0; i < Snack.snack_len; i++) {
+        Snack.snack_map[Snack.snack_len - i] = Snack.snack_map[Snack.snack_len - i - 1];
+    }
+    if (maptox(Snack.snack_map[1]) + Snack.dx >= BLOCK_WIDTH || maptox(Snack.snack_map[1]) + Snack.dx < 0) {
+        gameover();
+    }
+    if (maptoy(Snack.snack_map[1]) + Snack.dy >= BLOCK_HEIGHT || maptoy(Snack.snack_map[1]) + Snack.dy < 0) {
+        gameover();
+    }
+    Snack.snack_map[0] = xytomap(maptox(Snack.snack_map[1]) + Snack.dx, maptoy(Snack.snack_map[1]) + Snack.dy);
+    if (maptox(Snack.snack_map[0]) == Food.food_x && maptoy(Snack.snack_map[0]) == Food.food_y) {
+        WINDOW_SHAKE = 0;
+        initlizi(Food.food_x * (BLOCK_XY + BLOCK_JJ), Food.food_y * (BLOCK_XY + BLOCK_JJ));
+        foodinit();
+        Snack.snack_len++;
+        score += 10;
+    }
+    for (int i = 1; i < Snack.snack_len + 1; i++) {
+        if (maptox(Snack.snack_map[0]) == maptox(Snack.snack_map[i]) && maptoy(Snack.snack_map[0]) == maptoy(Snack.snack_map[i])) {
+            gameover();
+        }
+    }
+}
+
+void startBackgroundMusic() {
+    PlaySound(TEXT("D:\\backmusic.wav"), NULL, SND_FILENAME | SND_LOOP | SND_ASYNC);
+}
+
+void loadHighestScore() {
+    ifstream file("highscore.txt");
+    if (file.is_open()) {
+        file >> highestScore;
+        file.close();
+    }
+    else {
+        highestScore = 0;
+    }
+}
+
+int main() {
+    srand((unsigned)time(NULL));
+    initgraph(WIDTH, HEIGHT);
+    BeginBatchDraw();
+    loadHighestScore();
+    startBackgroundMusic();
+    DWORD t1, t2;
+    t1 = t2 = GetTickCount();
+    foodinit();
+    while (1) {
+        cleardevice();
+        drawlizi();
+        drawfood();
+        drawsnack();
+        gamewindowshake();
+        if (t2 - t1 > GAMETIME) {
+            gameupdata();
+            t1 = t2;
+        }
+        drawbk();
+        TCHAR scoreStr[100];
+        _stprintf_s(scoreStr, _countof(scoreStr), _T("Score: %d"), score);
+        outtextxy(10, 10, scoreStr);
+        if (!isNewHighScore) {
+            TCHAR highScoreStr[100];
+            _stprintf_s(highScoreStr, _countof(highScoreStr), _T("High Score: %d"), highestScore);
+            outtextxy(10, 50, highScoreStr);
+        }
+        FlushBatchDraw();
+        t2 = GetTickCount();
+    }
+    closegraph();
+    return 0;
+}
+
+

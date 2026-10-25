@@ -1,0 +1,7 @@
+*.exe
+*.msi
+x64/
+Debug/
+Release/
+.vs/
+highscore.txt

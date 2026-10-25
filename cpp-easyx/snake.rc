@@ -1,0 +1,4 @@
+// Sound resources compiled into the exe (PlaySound with SND_RESOURCE).
+// backmusic.wav and output.wav sit next to this file (22kHz mono copies of the original sounds).
+BACKMUSIC WAVE "backmusic.wav"
+OUTPUT    WAVE "output.wav"

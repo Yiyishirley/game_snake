@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Snake game by Shirley - C++/EasyX original ported to the web, with AI auto-play.">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+<title>Shirley 的贪吃蛇</title>
+<style>
+/* Layout: one 3:2 game screen (the original 1080x720 EasyX window), a control strip, then the local leaderboard */
+:root {
+  --bg: #120a10;
+  --panel: #1d1119;
+  --fg: #f6e6ee;
+  --muted: #b893a6;
+  --pink: #ff1493;   /* WALL_COLOR RGB(255,20,147) */
+  --snake: #ffb6c1;  /* SNAKE_COLOR RGB(255,182,193) */
+  --line: #3a2231;
+  --display: "Consolas", "Menlo", "DejaVu Sans Mono", monospace;
+  --body: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 28px;
+  box-sizing: border-box;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font-family: var(--display); font-size: 1.35rem; margin: 0; letter-spacing: .02em; color: var(--snake); text-wrap: balance; }
+h1 .ver { color: var(--pink); }
+.head-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.lang { display: flex; align-items: center; gap: 4px; font-size: .8rem; color: var(--muted); }
+.lang button { padding: 3px 8px; font-size: .78rem; }
+.lang-sep { color: var(--line); }
+.meta { color: var(--muted); font-size: .85rem; font-family: var(--display); font-variant-numeric: tabular-nums; }
+canvas {
+  display: block; width: 100%; max-width: 100%; aspect-ratio: 3 / 2; height: auto;
+  background: #000; border-radius: 6px; outline: 1px solid var(--line);
+  touch-action: none;
+}
+canvas:focus-visible { outline: 2px solid var(--snake); }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: .85rem; }
+kbd {
+  font-family: var(--display); font-size: .8rem; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 4px; padding: 1px 7px;
+}
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: 600 .85rem var(--display); color: var(--muted); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer;
+}
+button[aria-pressed="true"] { color: var(--bg); background: var(--snake); border-color: var(--snake); }
+button:focus-visible { outline: 2px solid var(--snake); outline-offset: 2px; }
+.pad { display: none; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pad button { color: var(--fg); min-width: 56px; padding: 10px 14px; }
+@media (hover: none) { .pad { display: flex; } }
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 20px; align-items: start; }
+@media (max-width: 720px) { .lower { grid-template-columns: minmax(0, 1fr); } }
+h2 { font-family: var(--display); font-size: .95rem; color: var(--snake); margin: 0 0 8px; letter-spacing: .04em; }
+table { width: 100%; border-collapse: collapse; font-family: var(--display); font-size: .85rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 400; }
+td.num { text-align: right; }
+th.num { text-align: right; }
+.empty { color: var(--muted); font-size: .85rem; }
+.note { color: var(--muted); font-size: .82rem; line-height: 1.7; margin: 0; max-width: 70ch; }
+.note b { color: var(--fg); font-weight: 600; }
+.note ul { margin: 0; padding-left: 1.2em; }
+.stack { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; margin-bottom: 12px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat b { font: 600 1.15rem var(--display); color: var(--fg); font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: .78rem; }
+.deaths { display: flex; flex-direction: column; gap: 6px; font-size: .8rem; color: var(--muted); }
+.deaths .row { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.5em; gap: 8px; align-items: center; }
+.deaths .track { height: 8px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+.deaths .fill { height: 100%; background: var(--pink); border-radius: 4px; }
+.deaths .n { text-align: right; font-family: var(--display); color: var(--fg); font-variant-numeric: tabular-nums; }
+.modal { position: fixed; inset: 0; z-index: 20; background: rgba(8,3,6,.8); display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+[hidden] { display: none !important; }
+.modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; max-width: min(420px, 100%); max-height: 100%; overflow: auto; }
+.modal-card img { width: 100%; height: auto; border-radius: 6px; display: block; }
+.modal-card p { margin: 0; color: var(--muted); font-size: .82rem; text-align: center; }
+a.dl { font: 600 .85rem var(--display); color: var(--bg); background: var(--snake); border-radius: 6px; padding: 7px 12px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span data-i18n="title">贪吃蛇</span> <span class="ver">v2</span></h1>
+    <div class="head-right">
+      <div class="meta" id="meta">Normal</div>
+      <div class="lang" role="group" aria-label="语言 / Language">
+        <span class="lang-label">语言 / Language：</span>
+        <button type="button" data-lang="zh" aria-pressed="true">中文</button><span class="lang-sep">/</span><button type="button" data-lang="en" aria-pressed="false">English</button>
+      </div>
+    </div>
+  </header>
+
+  <canvas id="game" width="1080" height="720" tabindex="0" aria-label="Snake game"></canvas>
+
+  <div class="bar">
+    <div class="keys">
+      <kbd>WASD</kbd>/<kbd>↑↓←→</kbd> <span data-i18n="kMove">移动</span>
+      <kbd>Space</kbd> <span data-i18n="kPause">暂停</span>
+      <kbd>T</kbd> <span data-i18n="kAi">AI 自动玩</span>
+      <kbd>V</kbd> <span data-i18n="kViz">AI 思路</span>
+      <kbd>Esc</kbd> <span data-i18n="kMenu">回菜单</span>
+    </div>
+    <div class="btns">
+      <button id="btnShare" type="button" hidden data-i18n="share">分享成绩</button>
+      <button id="btnAi" type="button" aria-pressed="false">AI 自动玩</button>
+      <button id="btnViz" type="button" aria-pressed="false">AI 思路</button>
+      <button id="btnSnd" type="button" aria-pressed="true">声音：开</button>
+    </div>
+  </div>
+
+  <div class="pad" aria-label="触屏按键">
+    <button type="button" data-k="up">↑</button>
+    <button type="button" data-k="left">←</button>
+    <button type="button" data-k="down">↓</button>
+    <button type="button" data-k="right">→</button>
+    <button type="button" data-k="pause" data-i18n="padPause">暂停</button>
+    <button type="button" data-k="enter" data-i18n="padStart">开始</button>
+  </div>
+
+  <div class="lower">
+    <div class="stack">
+      <section>
+        <h2 data-i18n="hBoard">本机排行榜</h2>
+        <div id="board"></div>
+      </section>
+      <section>
+        <h2 data-i18n="hStats">数据统计</h2>
+        <div id="stats"></div>
+      </section>
+    </div>
+    <section>
+      <h2 data-i18n="hHow">玩法</h2>
+      <div class="note">
+        <ul data-i18n-html="howList">
+          <li>菜单里按 <b>1 / 2 / 3</b> 选难度，<b>U</b> 开关障碍物，<b>Enter</b> 开始。</li>
+          <li>每吃一个食物加 10 分。不管选哪个难度，蛇都会越来越快。</li>
+          <li>短时间内连续吃到食物会触发连击，分数最多翻 4 倍。</li>
+          <li><b style="color:#ffc828">金色食物</b>限时出现，吃到加 50 分；<b style="color:#5aaaff">蓝色食物</b>让蛇慢下来。它们过一会儿就会消失。</li>
+          <li>按 <b>T</b> 让 AI 接手，按 <b>V</b> 看 AI 的思路。开过 AI 的局不进排行榜。</li>
+          <li>Game Over 后点「分享成绩」生成成绩图。</li>
+          <li>切到别的标签页时会自动暂停。</li>
+          <li>手机上可以在画面上滑动来转向。</li>
+          <li>吃满全屏就通关。</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="modal" id="shareModal" hidden>
+  <div class="modal-card" role="dialog" aria-label="Share card">
+    <img id="shareImg" alt="">
+    <p data-i18n="shareHint">右键或长按图片即可保存。</p>
+    <div class="btns">
+      <a class="dl" id="shareDl" download="snake-score.png" href="#" hidden data-i18n="download">下载图片</a>
+      <button id="shareClose" type="button" data-i18n="close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ===================== config (same numbers as the C++ version) =====================
+  const WIDTH = 1080, HEIGHT = 720;
+  const CELL_SIZE = 30, CELL_GAP = 2, CELL_STEP = CELL_SIZE + CELL_GAP;
+  const GRID_W = Math.floor(WIDTH / CELL_STEP);   // 33
+  const GRID_H = Math.floor(HEIGHT / CELL_STEP);  // 22
+  const OFFSET_X = WIDTH - GRID_W * CELL_STEP;    // 24
+  const OFFSET_Y = HEIGHT - GRID_H * CELL_STEP;   // 16
+  const SNAKE_COLOR = [255, 182, 193];
+  const WALL_COLOR = [255, 20, 147];
+  const FOOD_COLOR = [255, 255, 255];
+  const HEAD_INSET = 0, TAIL_INSET = 10;          // head is full size, tail shrinks by 10px
+  const PARTICLE_COUNT = 30, PARTICLE_LIFE = 480, GRAVITY = 0.001;
+  const SHAKE_FRAMES = 120;
+  const FRAMES_PER_RAF = 4;                       // the EasyX loop is uncapped; ~240 fps here
+  const SPEED_STEP = 3;
+  const DIFFICULTY = {
+    1: { name: 'Easy',   start: 150, min: 80 },
+    2: { name: 'Normal', start: 100, min: 50 },
+    3: { name: 'Hard',   start: 70,  min: 35 },
+  };
+  const OBSTACLE_SEGMENTS = 10;
+  const GOLD_COLOR = [255, 200, 40], BLUE_COLOR = [90, 170, 255];
+  const SPECIALS = {
+    gold: { color: GOLD_COLOR, chance: 0.18, lifeSteps: 45, points: 50 },   // grows the snake too
+    blue: { color: BLUE_COLOR, chance: 0.10, lifeSteps: 60, points: 10, slowMs: 15 },
+  };
+  const COMBO_WINDOW_STEPS = 30, COMBO_MAX_MULT = 4;
+  const STORE_KEY = 'shirley-snake-v2';
+
+  // ===================== language (中文 / English) =====================
+  const I18N = {
+    zh: {
+      docTitle: 'Shirley 的贪吃蛇', title: '贪吃蛇', langBtn: 'EN',
+      mode: '模式：', levels: { 1: '简单', 2: '中等', 3: '困难' },
+      kMove: '移动', kPause: '暂停', kAi: 'AI 自动玩', kViz: 'AI 思路', kMenu: '回菜单',
+      share: '分享成绩', ai: 'AI 自动玩', aiOn: 'AI 自动玩：开', viz: 'AI 思路', vizOn: 'AI 思路：开',
+      sndOn: '声音：开', sndOff: '声音：关', padPause: '暂停', padStart: '开始',
+      hBoard: '本机排行榜', hStats: '数据统计', hHow: '玩法',
+      howList: `<li>菜单里按 <b>1 / 2 / 3</b> 选难度，<b>U</b> 开关障碍物，<b>Enter</b> 开始。</li>
+          <li>每吃一个食物加 10 分。不管选哪个难度，蛇都会越来越快。</li>
+          <li>短时间内连续吃到食物会触发连击，分数最多翻 4 倍。</li>
+          <li><b style="color:#ffc828">金色食物</b>限时出现，吃到加 50 分；<b style="color:#5aaaff">蓝色食物</b>让蛇慢下来。它们过一会儿就会消失。</li>
+          <li>按 <b>T</b> 让 AI 接手，按 <b>V</b> 看 AI 的思路。开过 AI 的局不进排行榜。</li>
+          <li>Game Over 后点「分享成绩」生成成绩图。</li>
+          <li>切到别的标签页时会自动暂停。</li>
+          <li>手机上可以在画面上滑动来转向。</li>
+          <li>吃满全屏就通关。</li>`,
+      boardEmpty: '还没有成绩。手动玩一局，Game Over 后会记在这里（只存在这台设备的浏览器里）。',
+      thScore: '分数', thLevel: '难度', thTime: '时间', walls: ' + 障碍',
+      statsEmpty: '手动玩完一局后，这里会显示总局数、平均分和死因分布。',
+      sGames: '总局数', sAvg: '平均分', sBest: '最高分', sFoods: '吃掉的食物', sCombo: '最高连击', sMins: '游戏时长（分钟）',
+      dWall: '撞墙', dSelf: '撞自己', dObs: '撞障碍', dWin: '通关',
+      shareHint: '右键或长按图片即可保存。', download: '下载图片', close: '关闭', shareAlt: '成绩分享图',
+      aiFood: n => `AI：走最短路去吃食物（${n} 步），吃完还能追到尾巴`,
+      aiUnsafe: 'AI：这条路吃完会把自己困住 → 先追尾巴', aiNoPath: 'AI：找不到去食物的路 → 先追尾巴',
+    },
+    en: {
+      docTitle: "Shirley's Snake", title: 'Snake', langBtn: '中文',
+      mode: 'Mode: ', levels: { 1: 'Easy', 2: 'Normal', 3: 'Hard' },
+      kMove: 'move', kPause: 'pause', kAi: 'AI auto-play', kViz: 'AI thinking', kMenu: 'menu',
+      share: 'Share score', ai: 'AI auto-play', aiOn: 'AI auto-play: ON', viz: 'AI thinking', vizOn: 'AI thinking: ON',
+      sndOn: 'Sound: ON', sndOff: 'Sound: OFF', padPause: 'Pause', padStart: 'Start',
+      hBoard: 'Leaderboard (this device)', hStats: 'Stats', hHow: 'How to play',
+      howList: `<li>In the menu, press <b>1 / 2 / 3</b> to pick a difficulty, <b>U</b> to toggle obstacles, <b>Enter</b> to start.</li>
+          <li>Each food is worth 10 points. On every difficulty the snake keeps getting faster.</li>
+          <li>Eat again quickly to start a combo, up to 4× points.</li>
+          <li><b style="color:#ffc828">Gold food</b> shows up for a short time and is worth 50; <b style="color:#5aaaff">blue food</b> slows the snake down. Both disappear after a while.</li>
+          <li>Press <b>T</b> to let the AI play and <b>V</b> to see what it is thinking. Games where the AI played are not ranked.</li>
+          <li>After Game Over, click "Share score" to make a score card.</li>
+          <li>The game pauses when you switch to another tab.</li>
+          <li>On a phone, swipe on the game to turn.</li>
+          <li>Fill the whole board to win.</li>`,
+      boardEmpty: 'No scores yet. Play a game yourself and it will be listed here after Game Over (saved only in this browser).',
+      thScore: 'Score', thLevel: 'Level', thTime: 'Time', walls: ' + Walls',
+      statsEmpty: 'Finish a game yourself to see games played, average score and causes of death.',
+      sGames: 'Games', sAvg: 'Average', sBest: 'Best', sFoods: 'Food eaten', sCombo: 'Best combo', sMins: 'Minutes played',
+      dWall: 'Wall', dSelf: 'Self', dObs: 'Obstacle', dWin: 'Cleared',
+      shareHint: 'Right-click or long-press the image to save it.', download: 'Download', close: 'Close', shareAlt: 'Score card',
+      aiFood: n => `AI: shortest path to food (${n} steps), tail still reachable`,
+      aiUnsafe: 'AI: that path would trap me -> following my tail', aiNoPath: 'AI: no path to food -> following my tail',
+    },
+  };
+  let lang = (() => {
+    try { const saved = localStorage.getItem(STORE_KEY + '-lang'); if (saved === 'zh' || saved === 'en') return saved; } catch {}
+    return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  })();
+  const L = k => I18N[lang][k];
+  function applyLanguage() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = L('docTitle');
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = L(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = L(el.dataset.i18nHtml); });
+    document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === lang));
+    document.getElementById('shareImg').alt = L('shareAlt');
+    refreshToggleLabels();
+    renderBoard();
+    renderStats();
+    updateMeta();
+  }
+
+  // ===================== state =====================
+  const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const game = {
+    state: 'menu',           // menu | play | pause | over | win
+    difficulty: 2, obstacles: false,
+    snake: [], dir: [1, 0], inputQueue: [],
+    food: { x: 0, y: 0, frame: -30, popping: true },
+    walls: new Set(),
+    score: 0, stepMs: 100, lastStep: 0,
+    aiOn: false, aiUsed: false, stepsSinceFood: 0,
+    shake: SHAKE_FRAMES, camX: 0, camY: 0,
+    newRecord: false,
+    special: null,           // { x, y, type, expires }
+    stepCount: 0, combo: 0, comboUntil: -1, maxCombo: 0, foodsEaten: 0, activeMs: 0,
+    viz: false, aiTrace: null, popups: [],
+  };
+  const particles = [];
+
+  const key = (x, y) => y * GRID_W + x;
+  const rand = n => Math.floor(Math.random() * n);
+
+  // ===================== persistence: high score + local leaderboard =====================
+  function loadStore() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch {}
+    s = s || {};
+    s.board = s.board || [];
+    s.stats = Object.assign({ games: 0, totalScore: 0, foods: 0, maxCombo: 0, playMs: 0, deaths: { wall: 0, self: 0, obstacle: 0 }, wins: 0 }, s.stats);
+    return s;
+  }
+  function saveStore(s) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch {} }
+  let store = loadStore();
+  const highScore = () => store.board.length ? store.board[0].score : 0;
+  function recordScore() {
+    if (game.aiUsed || game.score <= 0) return false;
+    const isRecord = game.score > highScore();
+    store.board.push({ score: game.score, level: DIFFICULTY[game.difficulty].name, walls: game.obstacles, at: Date.now() });
+    store.board.sort((a, b) => b.score - a.score);
+    store.board = store.board.slice(0, 10);
+    saveStore(store);
+    renderBoard();
+    return isRecord;
+  }
+  function renderBoard() {
+    const el = document.getElementById('board');
+    if (!store.board.length) { el.innerHTML = `<p class="empty">${L('boardEmpty')}</p>`; return; }
+    const rows = store.board.map((r, i) => {
+      const d = new Date(r.at);
+      const date = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      return `<tr><td>${i + 1}</td><td class="num">${r.score}</td><td>${r.level}${r.walls ? L('walls') : ''}</td><td>${date}</td></tr>`;
+    }).join('');
+    el.innerHTML = `<table><thead><tr><th>#</th><th class="num">${L('thScore')}</th><th>${L('thLevel')}</th><th>${L('thTime')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  function recordStats(cause) {
+    if (game.aiUsed) return;
+    const st = store.stats;
+    st.games++; st.totalScore += game.score; st.foods += game.foodsEaten;
+    st.maxCombo = Math.max(st.maxCombo, game.maxCombo); st.playMs += game.activeMs;
+    if (cause === 'win') st.wins++; else st.deaths[cause]++;
+    saveStore(store);
+    renderStats();
+  }
+  function renderStats() {
+    const el = document.getElementById('stats'), st = store.stats;
+    if (!st.games) { el.innerHTML = `<p class="empty">${L('statsEmpty')}</p>`; return; }
+    const mins = Math.round(st.playMs / 60000);
+    const best = highScore();
+    const cells = [
+      [st.games, L('sGames')], [Math.round(st.totalScore / st.games), L('sAvg')], [best, L('sBest')],
+      [st.foods, L('sFoods')], [st.maxCombo ? 'x' + st.maxCombo : '-', L('sCombo')], [mins < 1 ? '<1' : mins, L('sMins')],
+    ].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+    const d = st.deaths, max = Math.max(1, d.wall, d.self, d.obstacle);
+    const row = (label, n) => `<div class="row"><span>${label}</span><div class="track"><div class="fill" style="width:${n / max * 100}%"></div></div><span class="n">${n}</span></div>`;
+    el.innerHTML = `<div class="stats">${cells}</div><div class="deaths">${row(L('dWall'), d.wall)}${row(L('dSelf'), d.self)}${row(L('dObs'), d.obstacle)}${st.wins ? row(L('dWin'), st.wins) : ''}</div>`;
+  }
+
+  // ===================== sound (audio extracted from the original Project3.exe) =====================
+  const bgm = new Audio('backmusic.mp3'); bgm.loop = true; bgm.preload = 'auto';
+  const overSfx = new Audio('output.mp3'); overSfx.preload = 'auto';
+  let soundOn = true, audioUnlocked = false;
+  function stopSound() { for (const a of [bgm, overSfx]) { a.pause(); a.currentTime = 0; } }
+  function play(a) { if (!soundOn || !audioUnlocked) return; a.currentTime = 0; a.play().catch(() => {}); }
+  function startBackgroundMusic() { stopSound(); play(bgm); }
+  let audioCtx = null;
+  function blip(freqs, dur = 0.07, type = 'square', vol = 0.06) {
+    // short eat sounds made with WebAudio, so no extra files are needed
+    if (!soundOn || !audioUnlocked) return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = audioCtx.currentTime;
+      freqs.forEach((f, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = type; o.frequency.value = f;
+        g.gain.setValueAtTime(vol, t0 + i * dur); g.gain.exponentialRampToValueAtTime(0.0001, t0 + (i + 1) * dur);
+        o.connect(g).connect(audioCtx.destination); o.start(t0 + i * dur); o.stop(t0 + (i + 1) * dur + 0.02);
+      });
+    } catch {}
+  }
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    if (game.state === 'play') play(bgm);
+  }
+
+  // ===================== game setup =====================
+  function freeCellCount() { return GRID_W * GRID_H - game.walls.size; }
+  function isBlockedForFood(x, y) {
+    return game.walls.has(key(x, y)) || game.snake.some(s => s.x === x && s.y === y)
+      || (game.special && game.special.x === x && game.special.y === y);
+  }
+  function placeFood() {
+    // Fix: the old goto-loop spun forever once the board was full. Collect the free cells first.
+    const free = [];
+    for (let y = 0; y < GRID_H; y++) for (let x = 0; x < GRID_W; x++) if (!isBlockedForFood(x, y)) free.push([x, y]);
+    if (!free.length) return false;
+    const [x, y] = free[rand(free.length)];
+    game.food = { x, y, frame: -30, popping: true };
+    return true;
+  }
+  function maybeSpawnSpecial() {
+    if (game.special) return;
+    const freeLeft = freeCellCount() - game.snake.length;
+    if (freeLeft < 40) return;                     // no specials near the end of a full-board run
+    const r = Math.random();
+    const type = r < SPECIALS.gold.chance ? 'gold' : r < SPECIALS.gold.chance + SPECIALS.blue.chance ? 'blue' : null;
+    if (!type) return;
+    for (let tries = 0; tries < 200; tries++) {
+      const x = rand(GRID_W), y = rand(GRID_H);
+      if (isBlockedForFood(x, y) || (x === game.food.x && y === game.food.y)) continue;
+      game.special = { x, y, type, expires: game.stepCount + SPECIALS[type].lifeSteps };
+      return;
+    }
+  }
+  function buildWalls() {
+    game.walls = new Set();
+    if (!game.obstacles) return;
+    let tries = 0;
+    while (game.walls.size < OBSTACLE_SEGMENTS * 3 && tries++ < 500) {
+      const len = 2 + rand(3), horiz = Math.random() < .5;
+      const x0 = rand(GRID_W - (horiz ? len : 0)), y0 = 3 + rand(GRID_H - 4 - (horiz ? 0 : len));
+      const cells = [];
+      for (let i = 0; i < len; i++) cells.push(key(x0 + (horiz ? i : 0), y0 + (horiz ? 0 : i)));
+      // keep a free ring around each segment so the board never gets sealed off
+      const ok = cells.every(c => {
+        const cx = c % GRID_W, cy = Math.floor(c / GRID_W);
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (game.walls.has(key(cx + dx, cy + dy))) return false;
+        return true;
+      });
+      if (ok) cells.forEach(c => game.walls.add(c));
+    }
+  }
+  function startGame() {
+    const d = DIFFICULTY[game.difficulty];
+    game.snake = [{ x: 2, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+    game.dir = [1, 0]; game.inputQueue = [];
+    game.score = 0; game.stepMs = d.start; game.lastStep = performance.now();
+    game.aiUsed = game.aiOn; game.newRecord = false; game.stepsSinceFood = 0;
+    game.shake = SHAKE_FRAMES;
+    game.special = null; game.stepCount = 0; game.combo = 0; game.comboUntil = -1; game.maxCombo = 0;
+    game.foodsEaten = 0; game.activeMs = 0; game.aiTrace = null; game.popups = [];
+    buildWalls();
+    placeFood();
+    game.state = 'play';
+    startBackgroundMusic();
+    updateMeta();
+  }
+  function gameOver(cause) {
+    game.state = 'over';
+    game.newRecord = recordScore();
+    recordStats(cause);
+    game.shake = 0;                 // Fix: shake once on game over instead of forever
+    stopSound(); play(overSfx);
+  }
+
+  // ===================== input =====================
+  function queueDirection(name) {
+    // Fix: keys are read every frame and buffered (max 2), so quick double turns are not lost.
+    const d = DIRS[name];
+    const q = game.inputQueue;
+    const last = q.length ? q[q.length - 1] : game.dir;
+    if (q.length >= 2) return;
+    if (d[0] === -last[0] && d[1] === -last[1]) return;   // no 180° turns
+    if (d[0] === last[0] && d[1] === last[1]) return;
+    q.push(d);
+  }
+  function toggleAi() {
+    game.aiOn = !game.aiOn;
+    if (game.aiOn && game.state === 'play') game.aiUsed = true;
+    const b = document.getElementById('btnAi');
+    b.setAttribute('aria-pressed', game.aiOn);
+    b.textContent = game.aiOn ? L('aiOn') : L('ai');
+  }
+  function toggleViz() {
+    game.viz = !game.viz;
+    const b = document.getElementById('btnViz');
+    b.setAttribute('aria-pressed', game.viz);
+    b.textContent = game.viz ? L('vizOn') : L('viz');
+    if (game.viz && !game.aiOn) toggleAi();          // the thinking only exists while the AI plays
+  }
+  function handleAction(a) {
+    unlockAudio();
+    if (a === 'ai') { toggleAi(); return; }
+    if (a === 'viz') { toggleViz(); return; }
+    if (game.state === 'menu') {
+      if (a === '1' || a === '2' || a === '3') { game.difficulty = +a; updateMeta(); }
+      else if (a === 'obstacles') game.obstacles = !game.obstacles;
+      else if (a === 'enter' || a === 'pause') startGame();
+      else if (a === 'up') { game.difficulty = Math.max(1, game.difficulty - 1); updateMeta(); }
+      else if (a === 'down') { game.difficulty = Math.min(3, game.difficulty + 1); updateMeta(); }
+      return;
+    }
+    if (a === 'menu') { stopSound(); game.state = 'menu'; return; }
+    if (game.state === 'play') {
+      if (DIRS[a] && !game.aiOn) queueDirection(a);
+      else if (a === 'pause') { game.state = 'pause'; stopSound(); }
+    } else if (game.state === 'pause') {
+      if (a === 'pause') { game.state = 'play'; game.lastStep = performance.now(); startBackgroundMusic(); }
+    } else if (game.state === 'over' || game.state === 'win') {
+      if (a === 'enter') startGame();
+    }
+  }
+  const KEYMAP = {
+    w: 'up', arrowup: 'up', s: 'down', arrowdown: 'down', a: 'left', arrowleft: 'left', d: 'right', arrowright: 'right',
+    ' ': 'pause', enter: 'enter', escape: 'menu', t: 'ai', v: 'viz', u: 'obstacles', 1: '1', 2: '2', 3: '3',
+  };
+  window.addEventListener('keydown', e => {
+    if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return;
+    const shareModal = document.getElementById('shareModal');
+    if (!shareModal.hidden) { if (e.key === 'Escape') { e.preventDefault(); closeModal(); } return; }
+    const a = KEYMAP[e.key.toLowerCase()];   // Fix: case-insensitive, so Caps Lock no longer breaks controls
+    if (!a) return;
+    if (e.target.tagName === 'BUTTON' && (a === 'pause' || a === 'enter')) return;
+    e.preventDefault();
+    if (e.repeat && !DIRS[a]) return;
+    handleAction(a);
+  });
+  // swipe on the canvas
+  const cv = document.getElementById('game');
+  let touchStart = null;
+  cv.addEventListener('pointerdown', e => { unlockAudio(); touchStart = [e.clientX, e.clientY]; cv.focus({ preventScroll: true }); });
+  cv.addEventListener('pointerup', e => {
+    if (!touchStart) return;
+    const dx = e.clientX - touchStart[0], dy = e.clientY - touchStart[1];
+    touchStart = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) {      // a tap
+      if (game.state !== 'play') handleAction(game.state === 'pause' ? 'pause' : 'enter');
+      return;
+    }
+    handleAction(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+  document.querySelectorAll('.pad button').forEach(b => b.addEventListener('click', () => handleAction(b.dataset.k)));
+  document.getElementById('btnAi').addEventListener('click', e => { handleAction('ai'); e.currentTarget.blur(); });
+  document.getElementById('btnViz').addEventListener('click', e => { handleAction('viz'); e.currentTarget.blur(); });
+  function refreshToggleLabels() {
+    document.getElementById('btnAi').textContent = game.aiOn ? L('aiOn') : L('ai');
+    document.getElementById('btnViz').textContent = game.viz ? L('vizOn') : L('viz');
+    sndBtn.textContent = soundOn ? L('sndOn') : L('sndOff');
+  }
+  document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => {
+    lang = b.dataset.lang;
+    try { localStorage.setItem(STORE_KEY + '-lang', lang); } catch {}
+    applyLanguage();
+    b.blur();
+  }));
+  // auto-pause when the tab is hidden or the window loses focus
+  function autoPause() { if (game.state === 'play') handleAction('pause'); }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
+  window.addEventListener('blur', autoPause);
+  const sndBtn = document.getElementById('btnSnd');
+  sndBtn.addEventListener('click', () => {
+    unlockAudio();
+    soundOn = !soundOn;
+    sndBtn.textContent = soundOn ? L('sndOn') : L('sndOff');
+    sndBtn.setAttribute('aria-pressed', soundOn);
+    if (!soundOn) { bgm.pause(); overSfx.pause(); } else if (game.state === 'play') play(bgm);
+    sndBtn.blur();
+  });
+
+  // ===================== AI: BFS to food, but only if the tail stays reachable =====================
+  const NEIGHBORS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const inBounds = (x, y) => x >= 0 && x < GRID_W && y >= 0 && y < GRID_H;
+  function bfsPath(body, from, to, tailFree, trace) {
+    // body[0] is the head; the tail cell is walkable when tailFree (it moves away next step)
+    const blocked = new Uint8Array(GRID_W * GRID_H);
+    game.walls.forEach(c => blocked[c] = 1);
+    for (let i = 0; i < body.length - (tailFree ? 1 : 0); i++) blocked[key(body[i].x, body[i].y)] = 1;
+    blocked[key(to.x, to.y)] = 0;
+    const prev = new Int32Array(GRID_W * GRID_H).fill(-1);
+    const start = key(from.x, from.y), goal = key(to.x, to.y);
+    const queue = [start]; prev[start] = start;
+    for (let qi = 0; qi < queue.length; qi++) {
+      const c = queue[qi];
+      if (c === goal && c !== start) break;
+      const cx = c % GRID_W, cy = Math.floor(c / GRID_W);
+      for (const [dx, dy] of NEIGHBORS) {
+        const nx = cx + dx, ny = cy + dy;
+        if (!inBounds(nx, ny)) continue;
+        const n = key(nx, ny);
+        if (prev[n] !== -1 || blocked[n]) continue;
+        prev[n] = c; queue.push(n);
+      }
+    }
+    if (trace) trace.visited = queue.slice();
+    if (prev[goal] === -1 || goal === start) return null;
+    const path = [];
+    for (let c = goal; c !== start; c = prev[c]) path.push({ x: c % GRID_W, y: Math.floor(c / GRID_W) });
+    return path.reverse();
+  }
+  function simulate(body, path, food) {
+    let b = body.slice();
+    for (const p of path) {
+      const grow = p.x === food.x && p.y === food.y;
+      b = [p, ...b];
+      if (!grow) b.pop();
+    }
+    return b;
+  }
+  function floodSize(body, start) {
+    const blocked = new Uint8Array(GRID_W * GRID_H);
+    game.walls.forEach(c => blocked[c] = 1);
+    for (let i = 0; i < body.length - 1; i++) blocked[key(body[i].x, body[i].y)] = 1;
+    const seen = new Uint8Array(GRID_W * GRID_H);
+    const q = [key(start.x, start.y)]; seen[q[0]] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const c = q[i], cx = c % GRID_W, cy = Math.floor(c / GRID_W);
+      for (const [dx, dy] of NEIGHBORS) {
+        const nx = cx + dx, ny = cy + dy;
+        if (!inBounds(nx, ny)) continue;
+        const n = key(nx, ny);
+        if (seen[n] || blocked[n]) continue;
+        seen[n] = 1; q.push(n);
+      }
+    }
+    return q.length;
+  }
+  function aiChooseDirection() {
+    const body = game.snake, head = body[0], tail = body[body.length - 1];
+    // 1) shortest path to food, accepted only if afterwards the head can still reach the tail
+    const trace = { visited: [], path: null, mode: 'food', rejected: null };
+    game.aiTrace = trace;
+    const toFood = bfsPath(body, head, game.food, true, trace);
+    if (toFood) {
+      const after = simulate(body, toFood, game.food);
+      if (after.length >= freeCellCount() || bfsPath(after, after[0], after[after.length - 1], true)) {
+        trace.path = toFood;
+        return dirTo(head, toFood[0]);
+      }
+      trace.rejected = toFood;                         // found a path, but eating there would trap the snake
+    }
+    trace.mode = toFood ? 'unsafe' : 'nopath';
+    // 2) otherwise chase the tail along the roomiest safe option; add randomness if it has circled too long
+    const stuck = game.stepsSinceFood > GRID_W * GRID_H;
+    let best = null, bestScore = -1;
+    for (const [dx, dy] of NEIGHBORS) {
+      const n = { x: head.x + dx, y: head.y + dy };
+      if (!isSafeStep(n)) continue;
+      const after = [n, ...body.slice(0, -1)];
+      const reachesTail = bfsPath(after, n, after[after.length - 1], true) !== null;
+      const dist = Math.abs(n.x - game.food.x) + Math.abs(n.y - game.food.y);
+      const score = (reachesTail ? 10000 : 0) + floodSize(after, n) * 10 + (stuck ? rand(2000) : dist);
+      if (score > bestScore) { bestScore = score; best = [dx, dy]; }
+    }
+    if (best) {
+      const n = { x: head.x + best[0], y: head.y + best[1] };
+      const after = [n, ...body.slice(0, -1)];
+      const toTail = bfsPath(after, n, after[after.length - 1], true);
+      trace.path = [n, ...(toTail || [])];
+    }
+    return best || game.dir;
+  }
+  function dirTo(a, b) { return [b.x - a.x, b.y - a.y]; }
+  function isSafeStep(n) {
+    if (!inBounds(n.x, n.y) || game.walls.has(key(n.x, n.y))) return false;
+    const body = game.snake;
+    for (let i = 0; i < body.length - 1; i++) if (body[i].x === n.x && body[i].y === n.y) return false;
+    return true;
+  }
+
+  // ===================== one movement step =====================
+  function gameUpdate() {
+    if (game.aiOn) { game.aiUsed = true; game.dir = aiChooseDirection(); }
+    else if (game.inputQueue.length) game.dir = game.inputQueue.shift();
+
+    game.stepCount++;
+    if (game.special && game.stepCount > game.special.expires) game.special = null;
+
+    const head = game.snake[0];
+    const next = { x: head.x + game.dir[0], y: head.y + game.dir[1] };
+    if (!inBounds(next.x, next.y)) { gameOver('wall'); return; }
+    if (game.walls.has(key(next.x, next.y))) { gameOver('obstacle'); return; }
+
+    const eats = next.x === game.food.x && next.y === game.food.y;
+    const sp = game.special && next.x === game.special.x && next.y === game.special.y ? game.special : null;
+    const grows = eats || (sp && sp.type === 'gold');
+    // Fix: the tail cell is free this step unless we grow, so following your own tail is legal.
+    const body = grows ? game.snake : game.snake.slice(0, -1);
+    if (body.some(s => s.x === next.x && s.y === next.y)) { gameOver('self'); return; }
+
+    game.snake.unshift(next);
+    if (!grows) game.snake.pop();
+    if (!eats && !sp) { game.stepsSinceFood++; return; }
+    game.stepsSinceFood = 0;
+
+    // combo: eating again within COMBO_WINDOW_STEPS steps raises the multiplier
+    game.combo = game.stepCount <= game.comboUntil ? game.combo + 1 : 1;
+    game.comboUntil = game.stepCount + COMBO_WINDOW_STEPS;
+    game.maxCombo = Math.max(game.maxCombo, game.combo);
+    const mult = Math.min(game.combo, COMBO_MAX_MULT);
+    if (game.combo >= 2) popup(`Combo x${game.combo}`, next, rgb(SNAKE_COLOR));
+    game.foodsEaten++;
+    game.shake = 0;
+
+    if (sp) {
+      const S = SPECIALS[sp.type];
+      game.score += S.points * mult;
+      if (sp.type === 'gold') { popup(`+${S.points * mult}`, { x: next.x, y: next.y + 1 }, rgb(GOLD_COLOR)); blip([880, 1175, 1568], 0.06); }
+      else { game.stepMs = Math.min(DIFFICULTY[game.difficulty].start, game.stepMs + S.slowMs); popup('Slow down', { x: next.x, y: next.y + 1 }, rgb(BLUE_COLOR)); blip([392, 262], 0.09, 'triangle', 0.09); }
+      spawnParticles(sp.x * CELL_STEP, sp.y * CELL_STEP, S.color);
+      game.special = null;
+    }
+    if (eats) {
+      game.score += 10 * mult;
+      game.stepMs = Math.max(DIFFICULTY[game.difficulty].min, game.stepMs - SPEED_STEP);
+      spawnParticles(game.food.x * CELL_STEP, game.food.y * CELL_STEP);
+      blip(game.combo >= 2 ? [660, 990] : [660], 0.06);
+      if (game.snake.length >= freeCellCount() || !placeFood()) { winGame(); return; }
+      maybeSpawnSpecial();
+    } else if (game.snake.length >= freeCellCount()) { winGame(); return; }
+    updateMeta();
+  }
+  function winGame() {
+    game.state = 'win'; game.special = null;
+    game.newRecord = recordScore();
+    recordStats('win');
+    stopSound(); blip([523, 659, 784, 1047], 0.12, 'triangle', 0.08);
+  }
+  function popup(text, cell, color) {
+    game.popups.push({ text, x: cell.x * CELL_STEP + CELL_SIZE / 2 + OFFSET_X / 2, y: cell.y * CELL_STEP + OFFSET_Y / 2, color, life: 260 });
+  }
+
+  // ===================== particles (now with a lifetime, so they stop costing CPU) =====================
+  function spawnParticles(x, y, tint) {
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle = 2 * Math.PI * Math.random(), speed = 0.5 * Math.sqrt(Math.random());
+      particles.push({
+        x: rand(CELL_SIZE) + x, y: rand(CELL_SIZE) + y,
+        dx: speed * Math.cos(angle), dy: speed * Math.sin(angle),
+        angle: rand(36000), spin: (rand(200) - 100) / 100,
+        color: tint ? tint.map(v => Math.max(0, Math.min(255, v + rand(80) - 40))) : [rand(256), rand(256), rand(256)], life: PARTICLE_LIFE,
+      });
+    }
+  }
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.dx; p.y += p.dy; p.dy += GRAVITY; p.angle += p.spin;
+      if (--p.life <= 0 || p.y > HEIGHT + 20) particles.splice(i, 1);
+    }
+  }
+
+  // ===================== drawing =====================
+  const ctx = cv.getContext('2d');
+  const rgb = (c, a = 1) => a === 1 ? `rgb(${c[0]},${c[1]},${c[2]})` : `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  function fillRect(l, t, r, b, color) {
+    l = Math.trunc(l); t = Math.trunc(t); r = Math.trunc(r); b = Math.trunc(b);
+    const x0 = Math.min(l, r), y0 = Math.min(t, b);
+    ctx.fillStyle = color; ctx.fillRect(x0, y0, Math.abs(r - l) + 1, Math.abs(b - t) + 1);
+  }
+  function drawCell(x, y, color, inset) {
+    const half = inset / 2, ox = Math.trunc(OFFSET_X / 2) + game.camX, oy = Math.trunc(OFFSET_Y / 2) + game.camY;
+    fillRect(x * CELL_STEP + half + ox, y * CELL_STEP + half + oy, x * CELL_STEP + CELL_SIZE - half + ox, y * CELL_STEP + CELL_SIZE - half + oy, rgb(color));
+  }
+  function drawSnake() {
+    const n = game.snake.length - 1;
+    game.snake.forEach((s, i) => drawCell(s.x, s.y, SNAKE_COLOR, i === 0 ? HEAD_INSET : HEAD_INSET + (TAIL_INSET - HEAD_INSET) * i / n));
+  }
+  function drawFood() {
+    const f = game.food;
+    if (f.popping) {
+      if (f.frame > 20) { f.frame = -30; f.popping = false; }
+      drawCell(f.x, f.y, FOOD_COLOR, Math.trunc(f.frame * f.frame / 10) - 100);
+      f.frame++;
+    } else drawCell(f.x, f.y, FOOD_COLOR, 0);
+  }
+  function drawSpecial() {
+    const sp = game.special;
+    if (!sp) return;
+    const left = sp.expires - game.stepCount, now = performance.now();
+    if (left < 15 && Math.floor(now / 120) % 2) return;            // blink before it disappears
+    const pulse = 4 + 4 * Math.sin(now / 140);
+    drawCell(sp.x, sp.y, SPECIALS[sp.type].color, pulse);
+  }
+  function drawPopups() {
+    for (let i = game.popups.length - 1; i >= 0; i--) {
+      const p = game.popups[i];
+      if (game.state !== 'pause') { p.life--; p.y -= 0.15; }
+      if (p.life <= 0) { game.popups.splice(i, 1); continue; }
+      ctx.save(); ctx.globalAlpha = Math.min(1, p.life / 60);
+      text(p.text, p.x, p.y - 30, 26, 'center', p.color);
+      ctx.restore();
+    }
+  }
+  const cellCenter = c => [c.x * CELL_STEP + CELL_SIZE / 2 + OFFSET_X / 2 + game.camX, c.y * CELL_STEP + CELL_SIZE / 2 + OFFSET_Y / 2 + game.camY];
+  function drawPathLine(path, from, color, dashed) {
+    if (!path || !path.length) return;
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (dashed) ctx.setLineDash([10, 10]);
+    ctx.beginPath(); ctx.moveTo(...cellCenter(from));
+    path.forEach(c => ctx.lineTo(...cellCenter(c)));
+    ctx.stroke(); ctx.restore();
+  }
+  function drawAiThinkingUnder() {
+    const t = game.aiTrace;
+    if (!game.viz || !game.aiOn || !t || game.state === 'menu') return;
+    // BFS search spreading out from the head, revealed over the step
+    const reveal = game.state === 'play' ? Math.min(1, (performance.now() - game.lastStep) / Math.max(30, game.stepMs * 0.7)) : 1;
+    const n = Math.floor(t.visited.length * reveal);
+    for (let i = 0; i < n; i++) {
+      const c = t.visited[i], x = c % GRID_W, y = Math.floor(c / GRID_W);
+      const a = 0.22 * (1 - i / t.visited.length) + 0.05;
+      drawCellAlpha(x, y, [120, 200, 255], a);
+    }
+  }
+  function drawAiThinkingOver() {
+    const t = game.aiTrace;
+    if (!game.viz || !game.aiOn || !t || game.state === 'menu') return;
+    const head = game.snake[0];
+    if (t.rejected) drawPathLine(t.rejected, head, 'rgba(255,80,80,.75)', true);
+    if (t.mode === 'food') drawPathLine(t.path, head, 'rgba(120,220,255,.95)', false);
+    else drawPathLine(t.path, head, 'rgba(255,210,60,.9)', false);
+    const label = t.mode === 'food' ? L('aiFood')(t.path ? t.path.length : 0) : t.mode === 'unsafe' ? L('aiUnsafe') : L('aiNoPath');
+    const color = t.mode === 'food' ? 'rgb(120,220,255)' : 'rgb(255,210,60)';
+    text(label, WIDTH / 2, HEIGHT - 52, 24, 'center', color);
+  }
+  function drawCellAlpha(x, y, color, a) {
+    const ox = Math.trunc(OFFSET_X / 2) + game.camX, oy = Math.trunc(OFFSET_Y / 2) + game.camY;
+    ctx.fillStyle = rgb(color, a);
+    ctx.fillRect(x * CELL_STEP + ox, y * CELL_STEP + oy, CELL_SIZE, CELL_SIZE);
+  }
+  function drawWalls() {
+    const c = rgb(WALL_COLOR), cx = game.camX, cy = game.camY;
+    fillRect(cx, cy, OFFSET_X / 2 + cx, HEIGHT + cy, c);
+    fillRect(WIDTH - OFFSET_X / 2 + cx, cy, WIDTH + cx, HEIGHT + cy, c);
+    fillRect(cx, cy, WIDTH + cx, OFFSET_Y / 2 + cy, c);
+    fillRect(cx, HEIGHT - OFFSET_Y / 2 + cy, WIDTH + cx, HEIGHT + cy, c);
+    game.walls.forEach(k => drawCell(k % GRID_W, Math.floor(k / GRID_W), WALL_COLOR, 0));
+  }
+  function drawParticles() {
+    for (const p of particles) {
+      const a = p.angle * Math.PI / 180, r = 5;
+      const px = Math.trunc(p.x + r * Math.cos(a)), py = Math.trunc(p.y + r * Math.sin(a));
+      fillRect(px - r, py - r, px + r, py + r, rgb(p.color, Math.min(1, p.life / 120)));
+    }
+  }
+  function font(h) { return `${h}px Consolas, Menlo, "DejaVu Sans Mono", monospace`; }
+  function text(s, x, y, h, align = 'left', color = '#fff') {
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 6;   // readable over the snake
+    ctx.font = font(h); ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top'; ctx.fillText(s, x, y);
+    ctx.restore();
+  }
+  function centerText(s, y, h, color = '#fff') {
+    ctx.font = font(h); ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(s).width, max = WIDTH - 80;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 10; ctx.translate(WIDTH / 2, y); if (w > max) ctx.scale(max / w, 1); ctx.fillText(s, 0, 0); ctx.restore();
+  }
+  function drawHud() {
+    text(`Score: ${game.score}`, 22, 14, 44);
+    text(`High Score: ${Math.max(highScore(), game.aiUsed ? 0 : game.score)}`, 22, 60, 30, 'left', 'rgba(255,255,255,.8)');
+    text(`${DIFFICULTY[game.difficulty].name}${game.obstacles ? ' + Walls' : ''} · ${game.stepMs}ms`, WIDTH - 22, 18, 24, 'right', 'rgba(255,255,255,.65)');
+    if (game.aiOn) text('AI', WIDTH - 22, 48, 30, 'right', rgb(SNAKE_COLOR));
+    if (game.state === 'play' && game.combo >= 2 && game.stepCount <= game.comboUntil) {
+      const left = (game.comboUntil - game.stepCount) / COMBO_WINDOW_STEPS;
+      text(`Combo x${Math.min(game.combo, COMBO_MAX_MULT)}`, WIDTH - 22, game.aiOn ? 84 : 50, 28, 'right', rgb(GOLD_COLOR));
+      ctx.fillStyle = rgb(GOLD_COLOR, 0.8);
+      ctx.fillRect(WIDTH - 22 - 140 * left, game.aiOn ? 116 : 82, 140 * left, 4);
+    }
+  }
+  function drawMenu() {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    const t = performance.now() / 1000;
+    // a demo snake drifting across the title screen
+    for (let i = 0; i < 12; i++) {
+      const x = ((Math.floor(t * 8) - i) % (GRID_W + 12) + GRID_W + 12) % (GRID_W + 12) - 6;
+      if (x >= 0 && x < GRID_W) drawCell(x, 4, SNAKE_COLOR, i === 0 ? 0 : 10 * i / 11);
+    }
+    drawWalls();
+    centerText('SNAKE', 250, 120, rgb(SNAKE_COLOR));
+    centerText('by Shirley', 330, 30, 'rgba(255,255,255,.7)');
+    [1, 2, 3].forEach((d, i) => {
+      const on = game.difficulty === d, D = DIFFICULTY[d];
+      centerText(`${on ? '> ' : '  '}${d}  ${D.name.padEnd(6)}  ${D.start}ms -> ${D.min}ms${on ? ' <' : '  '}`, 410 + i * 46, 34, on ? '#fff' : 'rgba(255,255,255,.45)');
+    });
+    centerText(`U  Obstacles: ${game.obstacles ? 'ON' : 'OFF'}`, 560, 30, game.obstacles ? rgb(WALL_COLOR) : 'rgba(255,255,255,.6)');
+    if (Math.floor(t * 2) % 2 === 0) centerText('Press Enter to Start', 640, 36);
+  }
+
+  function frame() {
+    const now = performance.now();
+    if (game.state === 'menu') { drawMenu(); return; }
+
+    if (game.state === 'play' && now - game.lastStep > game.stepMs) {
+      game.lastStep = now;
+      gameUpdate();
+    }
+    if (game.shake < SHAKE_FRAMES) { game.camX = rand(30) - 15; game.camY = rand(30) - 15; game.shake++; }
+    else { game.camX = 0; game.camY = 0; }
+    if (game.state !== 'pause') updateParticles();
+    if (game.state === 'play') { game.activeMs += now - (game.lastFrame || now); }
+    game.lastFrame = now;
+    syncShareButton();
+
+    const won = game.state === 'win';
+    if (won && ++winFrame % 40 === 0) spawnParticles(rand(GRID_W) * CELL_STEP, rand(GRID_H) * CELL_STEP);  // fireworks
+
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    drawAiThinkingUnder();
+    if (!won) drawParticles();
+    if (!won) { drawFood(); drawSpecial(); }
+    drawSnake();
+    if (won) drawParticles();
+    drawWalls();
+    drawAiThinkingOver();
+    drawPopups();
+    drawHud();
+    // Overlay text has a dark shadow; the win screen also gets a dark band, since the board is full of snake.
+    if (game.state === 'pause') {
+      centerText('Pause! ^3^', HEIGHT / 2, 90);
+    }
+    if (game.state === 'over') {
+      centerText('Game Over (-3-) ~ Press Enter to Restart', HEIGHT / 2, 50);
+      if (game.newRecord) centerText(`New High Score: ${game.score}`, HEIGHT / 2 + 70, 40, rgb(SNAKE_COLOR));
+      else if (game.aiUsed) centerText('AI run, not saved to the leaderboard', HEIGHT / 2 + 70, 30, 'rgba(255,255,255,.6)');
+    }
+    if (won) {
+      band(HEIGHT / 2 - 150, HEIGHT / 2 + 150);
+      const pulse = 1 + 0.04 * Math.sin(performance.now() / 180);
+      ctx.save(); ctx.translate(WIDTH / 2, HEIGHT / 2 - 55); ctx.scale(pulse, pulse); ctx.translate(-WIDTH / 2, -(HEIGHT / 2 - 55));
+      centerText('YOU WIN!', HEIGHT / 2 - 55, 110, rgb(SNAKE_COLOR));
+      ctx.restore();
+      centerText(`The board is full ^o^   Score: ${game.score}`, HEIGHT / 2 + 35, 36);
+      centerText(game.newRecord ? 'New High Score!' : (game.aiUsed ? 'Cleared by AI' : ''), HEIGHT / 2 + 80, 28, 'rgba(255,255,255,.7)');
+      centerText('Press Enter to Play Again', HEIGHT / 2 + 122, 28, 'rgba(255,255,255,.85)');
+    }
+  }
+  let winFrame = 0;
+  function band(top, bottom) {
+    ctx.fillStyle = 'rgba(14,6,11,.82)';
+    ctx.fillRect(OFFSET_X / 2, top, WIDTH - OFFSET_X, bottom - top);
+    ctx.fillStyle = rgb(WALL_COLOR);
+    ctx.fillRect(OFFSET_X / 2, top, WIDTH - OFFSET_X, 3);
+    ctx.fillRect(OFFSET_X / 2, bottom - 3, WIDTH - OFFSET_X, 3);
+  }
+  function loop() {
+    for (let i = 0; i < FRAMES_PER_RAF; i++) frame();
+    requestAnimationFrame(loop);
+  }
+  // ===================== share image =====================
+  const shareBtn = document.getElementById('btnShare');
+  function syncShareButton() {
+    const show = game.state === 'over' || game.state === 'win';
+    if (shareBtn.hidden === show) shareBtn.hidden = !show;
+  }
+  function makeShareImage() {
+    const W = 1080, H = 1350, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const F = h => `${h}px Consolas, Menlo, "DejaVu Sans Mono", monospace`;
+    g.fillStyle = '#120a10'; g.fillRect(0, 0, W, H);
+    g.fillStyle = rgb(WALL_COLOR); g.fillRect(0, 0, W, 14); g.fillRect(0, H - 14, W, 14);
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.fillStyle = rgb(SNAKE_COLOR); g.font = F(96); g.fillText('SNAKE', W / 2, 150);
+    g.fillStyle = 'rgba(255,255,255,.6)'; g.font = F(30); g.fillText('by Shirley', W / 2, 200);
+    g.fillStyle = '#fff'; g.font = F(170); g.fillText(String(game.score), W / 2, 390);
+    g.fillStyle = 'rgba(255,255,255,.7)'; g.font = F(34);
+    const result = game.state === 'win' ? 'YOU WIN! Board cleared' : 'Game Over (-3-)';
+    g.fillText(result, W / 2, 450);
+    const D = DIFFICULTY[game.difficulty];
+    const info = [`${D.name}${game.obstacles ? ' + Walls' : ''}`, `Length ${game.snake.length}`, `Max Combo x${game.maxCombo || 1}`];
+    g.font = F(30); g.fillStyle = rgb(SNAKE_COLOR); g.fillText(info.join('   ·   '), W / 2, 510);
+    if (game.aiUsed) { g.fillStyle = 'rgba(255,255,255,.5)'; g.font = F(26); g.fillText('played by AI', W / 2, 552); }
+    // mini board with the final snake
+    const cs = 28, gap = 2, bw = GRID_W * cs, bh = GRID_H * cs, bx = (W - bw) / 2, by = 600;
+    g.fillStyle = '#000'; g.fillRect(bx - 10, by - 10, bw + 20, bh + 20);
+    g.strokeStyle = rgb(WALL_COLOR); g.lineWidth = 6; g.strokeRect(bx - 13, by - 13, bw + 26, bh + 26);
+    const cell = (x, y, col, inset = 0) => { g.fillStyle = col; g.fillRect(bx + x * cs + inset / 2, by + y * cs + inset / 2, cs - gap - inset, cs - gap - inset); };
+    game.walls.forEach(k => cell(k % GRID_W, Math.floor(k / GRID_W), rgb(WALL_COLOR)));
+    if (game.state !== 'win') cell(game.food.x, game.food.y, '#fff');
+    const n = game.snake.length - 1;
+    game.snake.forEach((s, i) => cell(s.x, s.y, rgb(SNAKE_COLOR), i === 0 ? 0 : 9 * i / n));
+    const d = new Date();
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = F(28);
+    g.fillText(`${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`, W / 2, 1270);
+    g.fillStyle = rgb(SNAKE_COLOR); g.font = F(30);
+    g.fillText('yiyishirley.github.io/game_snake', W / 2, 1312);
+    return c.toDataURL('image/png');
+  }
+  const modal = document.getElementById('shareModal');
+  shareBtn.addEventListener('click', () => {
+    const url = makeShareImage();
+    document.getElementById('shareImg').src = url;
+    document.getElementById('shareDl').href = url;
+    modal.hidden = false;
+    document.getElementById('shareClose').focus();
+  });
+  function closeModal() { modal.hidden = true; cv.focus({ preventScroll: true }); }
+  document.getElementById('shareClose').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+  function updateMeta() {
+    document.getElementById('meta').textContent = L('mode') + L('levels')[game.difficulty];
+  }
+
+  // test hook for automated checks
+  window.__snake = { game, startGame, toggleAi, toggleViz, handleAction, gameUpdate, particles, makeShareImage };
+
+  applyLanguage();
+  updateMeta();
+  requestAnimationFrame(loop);
+  cv.focus({ preventScroll: true });
+})();
+</script>
+</body>
+</html>
